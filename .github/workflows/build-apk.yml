@@ -13,7 +13,8 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
 
     steps:
       - name: Download repository
@@ -25,11 +26,17 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Prepare existing Android SDK
+        shell: bash
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
 
-      - name: Install Android build tools
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+          set +o pipefail
+          yes | "$SDKMANAGER" --licenses
+          set -o pipefail
+
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -37,11 +44,14 @@ jobs:
           gradle-version: '8.11.1'
 
       - name: Extract app source
-        run: unzip -q pixeldeck-android.zip -d android-project
+        run: |
+          test -f pixeldeck-android.zip
+          unzip -q pixeldeck-android.zip -d android-project
+          printf 'sdk.dir=%s\n' "$ANDROID_HOME" > android-project/local.properties
 
       - name: Build APK
         working-directory: android-project
-        run: gradle :app:assembleDebug --no-daemon
+        run: gradle :app:assembleDebug --no-daemon --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
